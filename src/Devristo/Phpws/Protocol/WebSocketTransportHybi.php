@@ -146,7 +146,7 @@ class WebSocketTransportHybi extends WebSocketTransport
         }
 
         if ($this->_openMessage && $this->_openMessage->isFinalised()) {
-            $this->emit("message", array('message' => $this->_openMessage));
+            $this->emit("message", array($this->_openMessage));
             $this->_openMessage = null;
         }
     }

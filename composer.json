@@ -15,9 +15,8 @@
     },
     "require": {
         "zendframework/zend-log": "2.*",
-        "react/socket": "0.4.*",
-        "react/stream": "0.4.*",
-        "react/socket-client": "0.4.*",
+        "react/socket": "^0.8.6",
+        "react/stream": "^0.7.5",
         "zendframework/zend-http": "2.*"
     }
 }

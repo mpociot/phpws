@@ -2,21 +2,124 @@
 
 namespace Devristo\Phpws\Client;
 
-use React\SocketClient\Connector as BaseConnector;
-use React\EventLoop\LoopInterface;
+use React\Dns\Resolver\Factory;
 use React\Dns\Resolver\Resolver;
+use React\EventLoop\LoopInterface;
+use React\Promise;
 use React\Promise\When;
+use React\Socket\ConnectorInterface;
+use React\Socket\DnsConnector;
+use React\Socket\SecureConnector;
+use React\Socket\TcpConnector;
+use React\Socket\TimeoutConnector;
+use React\Socket\UnixConnector;
+use RuntimeException;
 
-class Connector extends BaseConnector
+class Connector implements ConnectorInterface
 {
-    protected $contextOptions = array();
+    protected $options = array();
 
-    public function __construct(LoopInterface $loop, Resolver $resolver, array $contextOptions = null)
+    public function __construct(LoopInterface $loop, Resolver $resolver, $options = array())
     {
-        parent::__construct($loop, $resolver);
+        // apply default options if not explicitly given
+        if (is_null($options)) {
+            $options = array();
+        }
+        $options += array(
+            'tcp' => true,
+            'tls' => true,
+            'unix' => true,
 
-        $contextOptions = null === $contextOptions ? array() : $contextOptions;
-        $this->contextOptions = $contextOptions;
+            'dns' => true,
+            'timeout' => true,
+        );
+
+        if ($options['timeout'] === true) {
+            $options['timeout'] = (float)ini_get("default_socket_timeout");
+        }
+
+        if ($options['tcp'] instanceof ConnectorInterface) {
+            $tcp = $options['tcp'];
+        } else {
+            $tcp = new TcpConnector(
+                $loop,
+                is_array($options['tcp']) ? $options['tcp'] : array()
+            );
+        }
+
+        if ($options['dns'] !== false) {
+            if ($options['dns'] instanceof Resolver) {
+                $resolver = $options['dns'];
+            } else {
+                $factory = new Factory();
+                $resolver = $factory->create(
+                    $options['dns'] === true ? '8.8.8.8' : $options['dns'],
+                    $loop
+                );
+            }
+
+            $tcp = new DnsConnector($tcp, $resolver);
+        }
+
+        if ($options['tcp'] !== false) {
+            $options['tcp'] = $tcp;
+
+            if ($options['timeout'] !== false) {
+                $options['tcp'] = new TimeoutConnector(
+                    $options['tcp'],
+                    $options['timeout'],
+                    $loop
+                );
+            }
+
+            $this->connectors['tcp'] = $options['tcp'];
+        }
+
+        if ($options['tls'] !== false) {
+            if (!$options['tls'] instanceof ConnectorInterface) {
+                $options['tls'] = new SecureConnector(
+                    $tcp,
+                    $loop,
+                    is_array($options['tls']) ? $options['tls'] : array()
+                );
+            }
+
+            if ($options['timeout'] !== false) {
+                $options['tls'] = new TimeoutConnector(
+                    $options['tls'],
+                    $options['timeout'],
+                    $loop
+                );
+            }
+
+            $this->connectors['tls'] = $options['tls'];
+        }
+
+        if ($options['unix'] !== false) {
+            if (!$options['unix'] instanceof ConnectorInterface) {
+                $options['unix'] = new UnixConnector($loop);
+            }
+            $this->connectors['unix'] = $options['unix'];
+        }
+
+        $options = null === $options ? array() : $options;
+        $this->contextOptions = $options;
+    }
+
+    public function connect($uri)
+    {
+        $scheme = 'tcp';
+        if (strpos($uri, '://') !== false) {
+            $scheme = (string)substr($uri, 0, strpos($uri, '://'));
+        }
+
+        if (!isset($this->connectors[$scheme])) {
+            return Promise\Reject(new RuntimeException(
+                'No connector available for URI scheme "' . $scheme . '"'
+            ));
+        }
+
+        return $this->connectors[$scheme]->connect($uri);
     }
 
     public function createSocketForAddress($address, $port, $hostName = null)

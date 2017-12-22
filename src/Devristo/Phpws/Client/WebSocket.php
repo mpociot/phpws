@@ -3,18 +3,19 @@
 namespace Devristo\Phpws\Client;
 
 use Devristo\Phpws\Exceptions\WebSocketInvalidUrlScheme;
-use Devristo\Phpws\Framing\WebSocketFrameInterface;
 use Devristo\Phpws\Framing\WebSocketFrame;
+use Devristo\Phpws\Framing\WebSocketFrameInterface;
 use Devristo\Phpws\Framing\WebSocketOpcode;
 use Devristo\Phpws\Messaging\WebSocketMessageInterface;
 use Devristo\Phpws\Protocol\Handshake;
+use Devristo\Phpws\Protocol\WebSocketConnection;
 use Devristo\Phpws\Protocol\WebSocketTransport;
 use Devristo\Phpws\Protocol\WebSocketTransportHybi;
-use Devristo\Phpws\Protocol\WebSocketConnection;
 use Devristo\Phpws\Reflection\FullAccessWrapper;
 use Evenement\EventEmitter;
 use React\EventLoop\LoopInterface;
 use React\Promise\Deferred;
+use React\Socket\ConnectionInterface;
 use Zend\Http\Request;
 use Zend\Http\Response;
 use Zend\Log\LoggerInterface;
@@ -87,13 +88,14 @@ class WebSocket extends EventEmitter
         $connector = new Connector($this->loop, $this->dns, $this->streamOptions);
 
         if ($isSecured) {
-            $connector = new \React\SocketClient\SecureConnector($connector, $this->loop);
+            $connector = new \React\Socket\SecureConnector($connector, $this->loop);
         }
 
         $deferred = new Deferred();
 
-        $connector->create($uri->getHost(), $uri->getPort() ?: $defaultPort)
-            ->then(function (\React\Stream\DuplexStreamInterface $stream) use ($that, $uri, $deferred, $timeOut){
+        $port = $uri->getPort() ?: $defaultPort;
+        $connector->connect($uri->getHost().':'.$port)
+            ->then(function (ConnectionInterface $stream) use ($that, $uri, $deferred, $timeOut){
 
                 if($timeOut){
                     $timeOutTimer = $that->loop->addTimer($timeOut, function() use($deferred, $stream, $that){
@@ -138,7 +140,7 @@ class WebSocket extends EventEmitter
                 });
 
                 $transport->on('message', function ($message) use ($that, $transport) {
-                    $that->emit("message", array("message" => $message));
+                    $that->emit("message", array($message));
                 });
 
                 $transport->initiateHandshake($uri);

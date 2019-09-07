@@ -53,7 +53,9 @@ class Connector implements ConnectorInterface
             } else {
                 $factory = new Factory();
                 $resolver = $factory->create(
-                    $options['dns'] === true ? '8.8.8.8' : $options['dns'],
+                    $options['dns'] === true
+                        ? (false === getenv('DNS_SERVER') ? '8.8.8.8' : getenv('DNS_SERVER'))
+                        : $options['dns'],
                     $loop
                 );
             }

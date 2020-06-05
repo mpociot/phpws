@@ -58,9 +58,11 @@ class WebSocket extends EventEmitter
 
     public function __construct($url, LoopInterface $loop, LoggerInterface $logger, array $streamOptions = null)
     {
+        $dnsServer = false === getenv('DNS_SERVER') ? '8.8.8.8' : getenv('DNS_SERVER');
+
         $this->logger = $logger;
         $this->loop = $loop;
-        $this->streamOptions = $streamOptions;
+        $this->streamOptions = array_merge(['dns' => $dnsServer], $streamOptions ?: array());
         $parts = parse_url($url);
 
         $this->url = $url;
@@ -69,8 +71,7 @@ class WebSocket extends EventEmitter
             throw new WebSocketInvalidUrlScheme();
 
         $dnsResolverFactory = new \React\Dns\Resolver\Factory();
-        $server = false === getenv('DNS_SERVER') ? '8.8.8.8' : getenv('DNS_SERVER');
-        $this->dns = $dnsResolverFactory->createCached($server, $loop);
+        $this->dns = $dnsResolverFactory->createCached($dnsServer, $loop);
     }
 
     public function open($timeOut=null)
